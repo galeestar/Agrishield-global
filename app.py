@@ -18,15 +18,15 @@ def fetch_agro_telemetry(lat: float, lon: float):
         "https://open-meteo.com"
         f"?latitude={lat}&longitude={lon}"
         "&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,et0_fao_evapotranspiration"
-        "&hourly=soil_moisture_0_to_1cm,soil_moisture_3_to_9cm"
+        "&hourly=soil_moisture_0_to_1cm,soil_moisture_1_to_3cm"
         "&timezone=auto"
     )
     try:
-        res = requests.get(url, timeout=12)
+        res = requests.get(url, timeout=15)
         res.raise_for_status()
-        return res.json()
-    except Exception:
-        return {}
+        return res.json(), ""
+    except Exception as exc:
+        return {}, str(exc)
 
 
 # --- SIDEBAR: FARM REGION & CROP PROFILE ---
@@ -46,8 +46,8 @@ with st.sidebar:
 
     zone_choice = st.selectbox("Select Agricultural Region", list(agricultural_zones.keys()), index=0)
     if zone_choice == "Custom Coordinates...":
-        lat = st.number_input("Latitude", min_value=-90.0, max_value=90.0, value=6.5244, format="%.4f")
-        lon = st.number_input("Longitude", min_value=-180.0, max_value=180.0, value=3.3792, format="%.4f")
+        lat = st.number_input("Latitude", min_value=-90.0, max_value=90.0, value=36.7783, format="%.4f")
+        lon = st.number_input("Longitude", min_value=-180.0, max_value=180.0, value=-119.4179, format="%.4f")
     else:
         lat, lon = agricultural_zones[zone_choice]
 
@@ -82,7 +82,7 @@ tab_soil, tab_water, tab_rotation = st.tabs(
 # ==============================================================================
 with tab_soil:
     st.subheader(f"🛰️ 7-Day Agro-Weather & Soil Telemetry ({lat:.2f}°, {lon:.2f}°)")
-    agro = fetch_agro_telemetry(lat, lon)
+    agro, err_msg = fetch_agro_telemetry(lat, lon)
 
     if agro and "daily" in agro:
         daily = agro["daily"]
@@ -106,11 +106,13 @@ with tab_soil:
         net_balance = total_rain - total_et0
 
         soil_now = 0.25
-        if hourly and "soil_moisture_3_to_9cm" in hourly and hourly["soil_moisture_3_to_9cm"]:
-            soil_now = float(hourly["soil_moisture_3_to_9cm"])
+        if hourly and "soil_moisture_1_to_3cm" in hourly:
+            soil_series = pd.Series(hourly["soil_moisture_1_to_3cm"]).dropna()
+            if not soil_series.empty:
+                soil_now = float(soil_series.head(1).item())
 
         m1, m2, m3, m4 = st.columns(4)
-        m1.metric("Root-Zone Moisture", f"{soil_now * 100:.1f}%")
+        m1.metric("Topsoil Moisture (1–3 cm)", f"{soil_now * 100:.1f}%")
         m2.metric("7-Day Expected Rain", f"{total_rain:.1f} mm")
         m3.metric("7-Day Evaporation Loss", f"{total_et0:.1f} mm")
         m4.metric(
@@ -132,7 +134,7 @@ with tab_soil:
 
         st.dataframe(df_daily, use_container_width=True, hide_index=True)
     else:
-        st.warning("Satellite telemetry temporarily unavailable for these coordinates.")
+        st.warning(f"Satellite telemetry temporarily unavailable ({err_msg or 'No data returned'}).")
 
 # ==============================================================================
 # TAB 2: PRECISION IRRIGATION & WATER CONSERVATION CALCULATOR
@@ -173,13 +175,13 @@ with tab_water:
     }
     efficiency = eff_map[irrigation_eff]
 
-    # Use live ET0 if available, otherwise fallback to 4.5 mm/day
     daily_et0 = 4.5
     if agro and "daily" in agro and agro["daily"].get("et0_fao_evapotranspiration"):
-        daily_et0 = float(pd.Series(agro["daily"]["et0_fao_evapotranspiration"]).mean())
+        et0_series = pd.Series(agro["daily"]["et0_fao_evapotranspiration"]).dropna()
+        if not et0_series.empty:
+            daily_et0 = float(et0_series.mean())
 
     crop_water_mm = daily_et0 * kc_factor
-    # 1 mm of water over 1 hectare (10,000 m²) = 10,000 liters
     gross_liters_day = (crop_water_mm * 10000 * field_hectares) / efficiency
     drip_liters_day = (crop_water_mm * 10000 * field_hectares) / 0.90
     water_saved_drip = max(0.0, gross_liters_day - drip_liters_day)
