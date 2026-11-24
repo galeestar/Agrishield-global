@@ -85,14 +85,14 @@ tab_timer, tab_habits, tab_analytics = st.tabs(
 )
 
 # ==============================================================================
-# TAB 1: SELF-CONTAINED BROWSER POMODORO TIMER (NO EXTERNAL LIBRARIES)
+# TAB 1: SELF-CONTAINED BROWSER POMODORO TIMER
 # ==============================================================================
 with tab_timer:
     col_t1, col_t2 = st.columns(2)
     with col_t1:
         preset_mins = st.selectbox(
             "Timer Preset",
-,
+            (25, 50, 15, 5),
             format_func=lambda x: f"{x} Minutes ({'Break' if x <= 15 else 'Focus'})",
         )
     with col_t2:
@@ -206,7 +206,6 @@ with tab_habits:
         disabled=["Habit"],
     )
 
-    # Sync edits back into session state
     for _, row in edited_df.iterrows():
         h_name = row["Habit"]
         st.session_state.habits[h_name] = [bool(row[d]) for d in days]
