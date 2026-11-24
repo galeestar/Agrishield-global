@@ -1,249 +1,248 @@
-import json
+from datetime import datetime
 import pandas as pd
 import plotly.express as px
-import requests
 import streamlit as st
+import streamlit.components.v1 as components
 
 st.set_page_config(
-    page_title="AgriShield | Global Crop & Soil Intelligence",
-    page_icon="🌾",
+    page_title="ChronoFocus | Deep Work & Habit Studio",
+    page_icon="⏱️",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
+# --- INITIALIZE SESSION STATE SAFELY ---
+if "sessions" not in st.session_state:
+    st.session_state.sessions = [
+        {"Task": "System Architecture & Coding", "Category": "Deep Work", "Minutes": 50, "Timestamp": "09:00"},
+        {"Task": "Research & Documentation", "Category": "Study", "Minutes": 45, "Timestamp": "11:15"},
+        {"Task": "Creative Design Sprint", "Category": "Creative", "Minutes": 30, "Timestamp": "14:00"},
+    ]
 
-# --- SAFE SATELLITE AGRO-WEATHER ENGINE (IMMUNE TO EMPTY JSON / IP BLOCKS) ---
-@st.cache_data(ttl=1800)
-def fetch_agro_telemetry(lat: float, lon: float):
-    url = (
-        "https://open-meteo.com"
-        f"?latitude={lat}&longitude={lon}"
-        "&daily=temperature_2m_max,temperature_2m_min,precipitation_sum,et0_fao_evapotranspiration"
-        "&hourly=soil_moisture_0_to_1cm"
-        "&timezone=auto"
-    )
-    headers = {
-        "User-Agent": "Mozilla/5.0 (compatible; AgriShieldOpenData/1.0)",
-        "Accept": "application/json",
+if "habits" not in st.session_state:
+    st.session_state.habits = {
+        "Deep Work (90+ mins)": [True, True, True, False, True, True, False],
+        "Daily Exercise / Movement": [True, False, True, True, True, False, True],
+        "Zero Distraction Morning": [True, True, False, True, True, True, False],
+        "Evening Review & Plan": [False, True, True, True, False, True, True],
     }
-    try:
-        res = requests.get(url, headers=headers, timeout=10)
-        if res.status_code == 200 and res.text and res.text.strip().startswith("{"):
-            data = json.loads(res.text)
-            if "daily" in data:
-                return data, True
-    except Exception:
-        pass
 
-    # Fallback regional agro-climate dataset if cloud server IP is rate-limited
-    dates = pd.date_range(end=pd.Timestamp.today(), periods=7).strftime("%Y-%m-%d").tolist()
-    base_temp = 31.0 if abs(lat) < 25 else 23.5
-    base_et0 = 5.1 if abs(lat) < 25 else 3.8
-    fallback_data = {
-        "daily": {
-            "time": dates,
-            "temperature_2m_max": [round(base_temp + d, 1) for d in [0.2, 0.8, -0.5, 1.1, 0.4, -0.3, 0.6]],
-            "temperature_2m_min": [round(base_temp - 9.5 + d, 1) for d in [0.1, 0.4, -0.2, 0.5, 0.2, -0.1, 0.3]],
-            "precipitation_sum": [3.2, 0.0, 0.0, 11.4, 2.1, 0.0, 1.5],
-            "et0_fao_evapotranspiration": [round(base_et0 + d, 2) for d in [0.1, 0.3, 0.4, -0.5, 0.0, 0.2, 0.3]],
-        },
-        "hourly": {
-            "soil_moisture_0_to_1cm": [0.26],
-        },
-    }
-    return fallback_data, False
-
-
-# --- SIDEBAR: FARM REGION & CROP PROFILE ---
+# --- SIDEBAR: QUICK SESSION LOGGER ---
 with st.sidebar:
-    st.title("🌾 AgriShield Global")
-    st.caption("Open-Source Soil, Irrigation & Food Security Planner")
+    st.title("⏱️ ChronoFocus")
+    st.caption("Zero-Distraction Deep Work & Habit Tracker")
 
-    agricultural_zones = {
-        "Central Valley, California, USA": (36.7783, -119.4179),
-        "Pampas Breadbasket, Argentina": (-34.6037, -58.3816),
-        "Punjab Agricultural Belt, India": (30.9010, 75.8573),
-        "Rift Valley Farmlands, Kenya": (-0.3031, 36.0800),
-        "Loire Valley, France": (47.3941, 0.6848),
-        "Mekong Delta, Vietnam": (10.0452, 105.7469),
-        "Custom Coordinates...": (0.0, 0.0),
-    }
+    with st.form("log_session_form", clear_on_submit=True):
+        st.subheader("➕ Log Completed Focus Block")
+        task_name = st.text_input("Task Name", placeholder="e.g., Build Python App")
+        category = st.selectbox("Category", ["Deep Work", "Study", "Creative", "Fitness", "Planning"])
+        duration = st.slider("Duration (Minutes)", min_value=5, max_value=180, value=25, step=5)
+        submitted = st.form_submit_button("Save Focus Session", use_container_width=True)
 
-    zone_choice = st.selectbox("Select Agricultural Region", list(agricultural_zones.keys()), index=0)
-    if zone_choice == "Custom Coordinates...":
-        lat = st.number_input("Latitude", min_value=-90.0, max_value=90.0, value=36.7783, format="%.4f")
-        lon = st.number_input("Longitude", min_value=-180.0, max_value=180.0, value=-119.4179, format="%.4f")
-    else:
-        lat, lon = agricultural_zones[zone_choice]
+        if submitted and task_name.strip():
+            st.session_state.sessions.append(
+                {
+                    "Task": task_name.strip(),
+                    "Category": category,
+                    "Minutes": int(duration),
+                    "Timestamp": datetime.now().strftime("%H:%M"),
+                }
+            )
+            st.success("Session logged!")
 
     st.divider()
-    st.markdown(
-        """
-        **🌍 Why This Matters:**
-        * Prevents groundwater waste via **FAO Evapotranspiration (ET₀)** math
-        * Protects smallholders against sudden heatwaves & dry spells
-        * Promotes soil-restoring crop rotations
-        """
+    df_export = pd.DataFrame(st.session_state.sessions)
+    st.download_button(
+        label="⬇️ Export Focus Log (CSV)",
+        data=df_export.to_csv(index=False).encode("utf-8"),
+        file_name="chronofocus_log.csv",
+        mime="text/csv",
+        use_container_width=True,
     )
 
-    if st.button("🔄 Sync Satellite Soil Feed", use_container_width=True):
-        st.cache_data.clear()
-        st.rerun()
+# --- MAIN HEADER & TOP METRICS ---
+st.title("⏱️ ChronoFocus: Deep Work & Habit Studio")
+st.caption("Interactive Pomodoro countdown timer, weekly habit matrix & visual time analytics")
 
-# --- MAIN HEADER ---
-st.title("🌾 AgriShield: Global Crop Resilience & Irrigation Hub")
-st.caption("Satellite soil moisture tracking, precision irrigation calculator & sustainable crop rotation planner")
+df_sessions = pd.DataFrame(st.session_state.sessions)
+total_mins = int(df_sessions["Minutes"].sum())
+total_hours = total_mins / 60.0
+session_count = len(df_sessions)
+top_cat = df_sessions.groupby("Category")["Minutes"].sum().idxmax()
 
-tab_soil, tab_water, tab_rotation = st.tabs(
+m1, m2, m3, m4 = st.columns(4)
+m1.metric("Total Focus Time", f"{total_mins} mins", f"{total_hours:.1f} hrs")
+m2.metric("Completed Blocks", f"{session_count}")
+m3.metric("Top Focus Area", top_cat)
+m4.metric("Daily Goal Progress", f"{min(100, int((total_mins / 240) * 100))}%", "Target: 240m")
+
+tab_timer, tab_habits, tab_analytics = st.tabs(
     [
-        "🛰️ Soil Moisture & Evapotranspiration",
-        "💧 Precision Irrigation Calculator",
-        "🔄 Sustainable Crop Rotation Planner",
+        "⏲️ Live Focus Timer",
+        "✅ Weekly Habit Matrix",
+        "📊 Time & Category Analytics",
     ]
 )
 
 # ==============================================================================
-# TAB 1: SATELLITE SOIL MOISTURE & EVAPOTRANSPIRATION
+# TAB 1: SELF-CONTAINED BROWSER POMODORO TIMER (NO EXTERNAL LIBRARIES)
 # ==============================================================================
-with tab_soil:
-    st.subheader(f"🛰️ 7-Day Agro-Weather & Soil Telemetry ({lat:.2f}°, {lon:.2f}°)")
-    agro, is_live = fetch_agro_telemetry(lat, lon)
-
-    if is_live:
-        st.success("Connected to live Open-Meteo satellite agro-telemetry.")
-    else:
-        st.info("Using regional agro-climate baseline model (live API rate-limited on shared cloud IP).")
-
-    daily = agro["daily"]
-    hourly = agro.get("hourly", {})
-
-    df_daily = pd.DataFrame(
-        {
-            "Date": daily["time"],
-            "Max Temp (°C)": daily["temperature_2m_max"],
-            "Min Temp (°C)": daily["temperature_2m_min"],
-            "Rainfall (mm)": daily["precipitation_sum"],
-            "Water Loss ET₀ (mm)": daily["et0_fao_evapotranspiration"],
-        }
-    )
-    df_daily["Net Water Balance (mm)"] = (
-        df_daily["Rainfall (mm)"] - df_daily["Water Loss ET₀ (mm)"]
-    ).round(2)
-
-    total_rain = float(df_daily["Rainfall (mm)"].sum())
-    total_et0 = float(df_daily["Water Loss ET₀ (mm)"].sum())
-    net_balance = total_rain - total_et0
-
-    soil_now = 0.25
-    if hourly and "soil_moisture_0_to_1cm" in hourly:
-        soil_series = pd.Series(hourly["soil_moisture_0_to_1cm"]).dropna()
-        if not soil_series.empty:
-            soil_now = float(soil_series.head(1).item())
-
-    m1, m2, m3, m4 = st.columns(4)
-    m1.metric("Topsoil Moisture", f"{soil_now * 100:.1f}%")
-    m2.metric("7-Day Expected Rain", f"{total_rain:.1f} mm")
-    m3.metric("7-Day Evaporation Loss", f"{total_et0:.1f} mm")
-    m4.metric(
-        "Net Soil Water Balance",
-        f"{net_balance:+.1f} mm",
-        "Surplus" if net_balance >= 0 else "Irrigation Needed",
-    )
-
-    fig_water = px.bar(
-        df_daily,
-        x="Date",
-        y=["Rainfall (mm)", "Water Loss ET₀ (mm)"],
-        barmode="group",
-        template="plotly_dark",
-        title="Daily Rainfall vs. Crop Evapotranspiration Water Loss",
-    )
-    fig_water.update_layout(height=380)
-    st.plotly_chart(fig_water, use_container_width=True)
-
-    st.dataframe(df_daily, use_container_width=True, hide_index=True)
-
-# ==============================================================================
-# TAB 2: PRECISION IRRIGATION & WATER CONSERVATION CALCULATOR
-# ==============================================================================
-with tab_water:
-    st.subheader("💧 Precision Crop Water Requirement Calculator")
-    st.caption("Calculate exact water volumes to prevent crop stress and eliminate water waste.")
-
-    crop_kc = {
-        "Maize / Corn (Kc = 1.15)": (1.15, 4.5),
-        "Rice (Kc = 1.20)": (1.20, 6.0),
-        "Wheat / Barley (Kc = 1.05)": (1.05, 3.8),
-        "Tomatoes & Vegetables (Kc = 1.10)": (1.10, 4.2),
-        "Soybeans / Legumes (Kc = 0.95)": (0.95, 3.5),
-        "Cassava / Root Crops (Kc = 0.85)": (0.85, 3.0),
-    }
-
-    c1, c2, c3 = st.columns(3)
-    with c1:
-        selected_crop = st.selectbox("Select Crop Type", list(crop_kc.keys()))
-        kc_factor, avg_yield_tons = crop_kc[selected_crop]
-    with c2:
-        field_hectares = st.number_input("Field Area (Hectares)", min_value=0.1, value=2.0, step=0.5)
-    with c3:
-        irrigation_eff = st.selectbox(
-            "Irrigation Method",
-            [
-                "Drip Irrigation (90% Efficient)",
-                "Sprinkler System (75% Efficient)",
-                "Surface / Furrow Flooding (60% Efficient)",
-            ],
+with tab_timer:
+    col_t1, col_t2 = st.columns(2)
+    with col_t1:
+        preset_mins = st.selectbox(
+            "Timer Preset",
+,
+            format_func=lambda x: f"{x} Minutes ({'Break' if x <= 15 else 'Focus'})",
         )
+    with col_t2:
+        st.info("Click **Start** below. Plays a soft chime when the countdown finishes.")
 
-    eff_map = {
-        "Drip Irrigation (90% Efficient)": 0.90,
-        "Sprinkler System (75% Efficient)": 0.75,
-        "Surface / Furrow Flooding (60% Efficient)": 0.60,
-    }
-    efficiency = eff_map[irrigation_eff]
+    timer_html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <style>
+        body {{
+          margin: 0; background: #0e1117; color: #f8fafc;
+          font-family: system-ui, -apple-system, sans-serif;
+          display: flex; flex-direction: column; align-items: center; justify-content: center;
+          height: 260px; border: 1px solid #262730; border-radius: 16px;
+        }}
+        #clock {{
+          font-size: 76px; font-weight: 800; letter-spacing: 3px;
+          color: #00e676; margin-bottom: 18px;
+        }}
+        .btns {{ display: flex; gap: 12px; }}
+        button {{
+          border: none; padding: 12px 26px; border-radius: 10px;
+          font-size: 16px; font-weight: 700; cursor: pointer;
+        }}
+        .start {{ background: #00e676; color: #052e16; }}
+        .pause {{ background: #f59e0b; color: #1c1917; }}
+        .reset {{ background: #334155; color: #f8fafc; }}
+      </style>
+    </head>
+    <body>
+      <div id="clock">{preset_mins:02d}:00</div>
+      <div class="btns">
+        <button class="start" onclick="startTimer()">▶ Start</button>
+        <button class="pause" onclick="pauseTimer()">⏸ Pause</button>
+        <button class="reset" onclick="resetTimer()">↺ Reset</button>
+      </div>
 
-    daily_et0 = float(df_daily["Water Loss ET₀ (mm)"].mean())
-    crop_water_mm = daily_et0 * kc_factor
-    gross_liters_day = (crop_water_mm * 10000 * field_hectares) / efficiency
-    drip_liters_day = (crop_water_mm * 10000 * field_hectares) / 0.90
-    water_saved_drip = max(0.0, gross_liters_day - drip_liters_day)
+      <script>
+        let totalSeconds = {preset_mins} * 60;
+        let remaining = totalSeconds;
+        let interval = null;
 
-    w1, w2, w3 = st.columns(3)
-    w1.metric("Daily Crop Need", f"{crop_water_mm:.2f} mm / day")
-    w2.metric("Total Water Required", f"{gross_liters_day:,.0f} Liters / day")
-    w3.metric("Potential Drip Savings", f"{water_saved_drip:,.0f} Liters / day")
+        function updateDisplay() {{
+          const m = String(Math.floor(remaining / 60)).padStart(2, "0");
+          const s = String(remaining % 60).padStart(2, "0");
+          document.getElementById("clock").innerText = m + ":" + s;
+        }}
+
+        function beep() {{
+          try {{
+            const ctx = new (window.AudioContext || window.webkitAudioContext)();
+            const osc = ctx.createOscillator();
+            osc.type = "sine";
+            osc.frequency.value = 528;
+            osc.connect(ctx.destination);
+            osc.start();
+            setTimeout(() => osc.stop(), 400);
+          }} catch (e) {{}}
+        }}
+
+        function startTimer() {{
+          if (interval) return;
+          interval = setInterval(() => {{
+            if (remaining > 0) {{
+              remaining--;
+              updateDisplay();
+            }} else {{
+              clearInterval(interval);
+              interval = null;
+              beep();
+            }}
+          }}, 1000);
+        }}
+
+        function pauseTimer() {{
+          clearInterval(interval);
+          interval = null;
+        }}
+
+        function resetTimer() {{
+          pauseTimer();
+          remaining = totalSeconds;
+          updateDisplay();
+        }}
+      </script>
+    </body>
+    </html>
+    """
+    components.html(timer_html, height=280, scrolling=False)
 
 # ==============================================================================
-# TAB 3: SUSTAINABLE CROP ROTATION & HARVEST PLANNER
+# TAB 2: INTERACTIVE WEEKLY HABIT STREAK MATRIX
 # ==============================================================================
-with tab_rotation:
-    st.subheader("🔄 Soil-Restoring 4-Season Crop Rotation Planner")
-    st.caption(
-        "Rotating crop families naturally replenishes soil nitrogen, breaks pest cycles, and boosts long-term yields."
+with tab_habits:
+    st.subheader("✅ 7-Day Consistency Matrix")
+    days = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+
+    habit_rows = []
+    for habit_name, checks in st.session_state.habits.items():
+        row_dict = {"Habit": habit_name}
+        for idx, day_label in enumerate(days):
+            row_dict[day_label] = checks[idx]
+        habit_rows.append(row_dict)
+
+    habit_df = pd.DataFrame(habit_rows)
+    edited_df = st.data_editor(
+        habit_df,
+        use_container_width=True,
+        hide_index=True,
+        disabled=["Habit"],
     )
 
-    rotation_plans = pd.DataFrame(
-        [
-            {
-                "Season": "Season 1 (Heavy Feeder)",
-                "Recommended Crop": "Maize / Sweet Corn or Wheat",
-                "Soil Impact": "Consumes high nitrogen; builds organic biomass",
-                "Est. Harvest Window": "90 – 120 Days",
-            },
-            {
-                "Season": "Season 2 (Nitrogen Fixer)",
-                "Recommended Crop": "Soybeans, Cowpeas, or Lentils",
-                "Soil Impact": "Symbiotic root bacteria fix atmospheric nitrogen back into soil",
-                "Est. Harvest Window": "75 – 100 Days",
-            },
-            {
-                "Season": "Season 3 (Deep Root / Leafy)",
-                "Recommended Crop": "Tomatoes, Cabbage, or Sunflower",
-                "Soil Impact": "Breaks up compacted subsoil and utilizes residual nutrients",
-                "Est. Harvest Window": "65 – 90 Days",
-            },
-            {
-                "Season": "Season 4 (Root & Cover Rest)",
-                "Recommended Crop": "Sweet Potatoes, Carrots, or Clover Cover",
-                "Soil Impact": "Prevents soil erosion, suppresses weeds, and restores moisture retention",
-                "Est. Harvest Window": "80 – 110 Days",
+    # Sync edits back into session state
+    for _, row in edited_df.iterrows():
+        h_name = row["Habit"]
+        st.session_state.habits[h_name] = [bool(row[d]) for d in days]
+
+    total_checks = sum(sum(vals) for vals in st.session_state.habits.values())
+    max_checks = len(st.session_state.habits) * 7
+    consistency_pct = int((total_checks / max_checks) * 100) if max_checks else 0
+    st.progress(consistency_pct / 100.0, text=f"Weekly Habit Consistency: {consistency_pct}% ({total_checks}/{max_checks} completed)")
+
+# ==============================================================================
+# TAB 3: TIME & CATEGORY ANALYTICS
+# ==============================================================================
+with tab_analytics:
+    c1, c2 = st.columns(2)
+    with c1:
+        cat_summary = df_sessions.groupby("Category", as_index=False)["Minutes"].sum()
+        fig_pie = px.pie(
+            cat_summary,
+            names="Category",
+            values="Minutes",
+            hole=0.45,
+            template="plotly_dark",
+            title="Time Distribution by Category",
+        )
+        st.plotly_chart(fig_pie, use_container_width=True)
+
+    with c2:
+        fig_bar = px.bar(
+            df_sessions,
+            x="Task",
+            y="Minutes",
+            color="Category",
+            template="plotly_dark",
+            title="Minutes per Focus Session",
+        )
+        st.plotly_chart(fig_bar, use_container_width=True)
+
+    st.subheader("📋 Session History")
+    st.dataframe(df_sessions, use_container_width=True, hide_index=True)
